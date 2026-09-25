@@ -91,3 +91,57 @@ func TestReconcileInviteAndElevate(t *testing.T) {
 		t.Fatalf("expected role update, got %v", fk.updates)
 	}
 }
+
+func TestReconcileSkipsWhenNoGroupsYet(t *testing.T) {
+	st := store.New("")
+	_ = st.UpsertUser(&store.User{ID: "u1", Email: "svc@example.com", Active: true, UserName: "svc"})
+
+	fk := &fakeKaneo{
+		workspaces: map[string]*kaneo.Workspace{
+			"product": {ID: "ws1", Slug: "product", Name: "Product"},
+		},
+		members: map[string][]kaneo.Member{
+			"ws1": {{ID: "m1", Role: "admin", Email: "svc@example.com"}},
+		},
+	}
+	engine := &reconcile.Engine{
+		Store: st,
+		Assignments: &assignments.Config{Assignments: []assignments.Assignment{
+			{Group: "kaneo-service", Workspace: "product", Role: assignments.RoleAdmin},
+		}},
+		Kaneo: fk,
+	}
+	if err := engine.User(context.Background(), "u1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(fk.removes) != 0 {
+		t.Fatalf("must not remove before groups sync, got %v", fk.removes)
+	}
+}
+
+func TestReconcileRemovesWhenInactive(t *testing.T) {
+	st := store.New("")
+	_ = st.UpsertUser(&store.User{ID: "u1", Email: "svc@example.com", Active: false, UserName: "svc"})
+
+	fk := &fakeKaneo{
+		workspaces: map[string]*kaneo.Workspace{
+			"product": {ID: "ws1", Slug: "product", Name: "Product"},
+		},
+		members: map[string][]kaneo.Member{
+			"ws1": {{ID: "m1", Role: "admin", Email: "svc@example.com"}},
+		},
+	}
+	engine := &reconcile.Engine{
+		Store: st,
+		Assignments: &assignments.Config{Assignments: []assignments.Assignment{
+			{Group: "kaneo-service", Workspace: "product", Role: assignments.RoleAdmin},
+		}},
+		Kaneo: fk,
+	}
+	if err := engine.User(context.Background(), "u1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(fk.removes) != 1 {
+		t.Fatalf("expected remove when inactive, got %v", fk.removes)
+	}
+}

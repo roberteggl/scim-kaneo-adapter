@@ -40,10 +40,19 @@ func (e *Engine) User(ctx context.Context, userID string) error {
 	}
 
 	var desired map[string]assignments.Role
+	groups := e.Store.GroupNamesForUser(userID)
 	if u.Active {
-		desired = e.Assignments.DesiredWorkspaces(e.Store.GroupNamesForUser(userID))
+		desired = e.Assignments.DesiredWorkspaces(groups)
 	} else {
 		desired = map[string]assignments.Role{}
+	}
+
+	// Authentik often POSTs Users before Groups. An active user with no SCIM
+	// group membership yet must not be stripped from workspaces — wait until
+	// groups arrive (or the user is deactivated).
+	if u.Active && len(groups) == 0 {
+		slog.Info("skip reconcile until groups synced", "email", strings.TrimSpace(u.Email), "user", userID)
+		return nil
 	}
 
 	// Ensure every assignment-referenced workspace is considered for removal.
