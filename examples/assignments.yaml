@@ -1,10 +1,17 @@
 # Maps Authentik (or other IdP) SCIM groups to Kaneo workspaces + roles.
-# Highest role wins when a user is in multiple groups for the same workspace.
-# Allowed roles: viewer, member, admin (owner is never assigned by SCIM).
+#
+# - One group may appear in multiple rows to grant several workspaces at once.
+# - Highest role wins when a user is in multiple groups for the same workspace.
+# - Allowed roles: viewer, member, admin (owner is never assigned by SCIM).
 assignments:
-  - group: kaneo-neuland-admin
+  # Single Authentik group → multiple Kaneo workspaces
+  - group: vorstand
     workspace: neuland
     role: admin
+  - group: vorstand
+    workspace: infra
+    role: member
+
   - group: kaneo-neuland-member
     workspace: neuland
     role: member

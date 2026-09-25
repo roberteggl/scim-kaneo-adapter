@@ -6,9 +6,11 @@ the adapter keeps the SCIM user/group catalogue and translates membership into
 Kaneo workspace invites via Kaneo's Better Auth organization API (`x-api-key`).
 
 Unlike a 1:1 group sync, workspace access is driven by an **assignment matrix**:
-each SCIM group `displayName` maps to one or more `(workspace, role)` pairs.
-When a user belongs to several mapped groups for the same workspace, the
-**highest role wins** (`admin` > `member` > `viewer`). Owner is never assigned.
+list as many rows as you need. A **single Authentik / SCIM group can grant
+access to multiple Kaneo workspaces** (repeat the same `group` with different
+`workspace` values). When a user belongs to several mapped groups for the
+**same** workspace, the **highest role wins** (`admin` > `member` > `viewer`).
+Owner is never assigned.
 
 ## How it works
 
@@ -36,14 +38,22 @@ API (email invite / pending membership).
 
 ### Assignments YAML
 
+Each row is one `(group → workspace + role)` mapping. Reuse the same `group`
+across rows to put members of that one IdP group into several workspaces:
+
 ```yaml
 assignments:
-  - group: kaneo-neuland-admin
-    workspace: neuland   # slug or organization id
-    role: admin          # viewer | member | admin
-  - group: kaneo-neuland-member
+  # One Authentik group → two Kaneo workspaces
+  - group: vorstand
     workspace: neuland
+    role: admin
+  - group: vorstand
+    workspace: infra
     role: member
+
+  - group: kaneo-neuland-member
+    workspace: neuland   # slug or organization id
+    role: member         # viewer | member | admin
 ```
 
 See [`examples/assignments.yaml`](examples/assignments.yaml).
