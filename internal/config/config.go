@@ -15,8 +15,9 @@ type Config struct {
 
 	SCIMToken string
 
-	KaneoURL    string
-	KaneoAPIKey string
+	KaneoURL         string
+	KaneoAPIKey      string
+	KaneoDatabaseURL string
 
 	AssignmentsFile string
 	Assignments     *assignments.Config
@@ -28,12 +29,13 @@ type Config struct {
 // FromEnv builds Config from environment variables.
 func FromEnv() (*Config, error) {
 	c := &Config{
-		ListenAddr:      envOr("LISTEN_ADDR", ":8080"),
-		SCIMToken:       os.Getenv("SCIM_TOKEN"),
-		KaneoURL:        strings.TrimRight(os.Getenv("KANEO_URL"), "/"),
-		KaneoAPIKey:     os.Getenv("KANEO_API_KEY"),
-		AssignmentsFile: os.Getenv("ASSIGNMENTS_FILE"),
-		StoreFile:       os.Getenv("STORE_FILE"),
+		ListenAddr:       envOr("LISTEN_ADDR", ":8080"),
+		SCIMToken:        os.Getenv("SCIM_TOKEN"),
+		KaneoURL:         strings.TrimRight(os.Getenv("KANEO_URL"), "/"),
+		KaneoAPIKey:      os.Getenv("KANEO_API_KEY"),
+		KaneoDatabaseURL: os.Getenv("KANEO_DATABASE_URL"),
+		AssignmentsFile:  os.Getenv("ASSIGNMENTS_FILE"),
+		StoreFile:        os.Getenv("STORE_FILE"),
 	}
 	if c.SCIMToken == "" {
 		return nil, fmt.Errorf("SCIM_TOKEN is required")

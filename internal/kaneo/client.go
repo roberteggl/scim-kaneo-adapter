@@ -4,6 +4,7 @@ package kaneo
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,6 +19,7 @@ type Client struct {
 	base   string
 	apiKey string
 	http   *http.Client
+	db     *sql.DB // optional; enables direct membership (no invite emails)
 }
 
 // New builds a Client. baseURL is the Kaneo origin (no trailing slash).

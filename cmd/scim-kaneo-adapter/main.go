@@ -29,6 +29,18 @@ func main() {
 
 	st := store.New(cfg.StoreFile)
 	client := kaneo.New(cfg.KaneoURL, cfg.KaneoAPIKey)
+	db, err := kaneo.OpenDB(cfg.KaneoDatabaseURL)
+	if err != nil {
+		logger.Error("kaneo db", "err", err)
+		os.Exit(1)
+	}
+	if db != nil {
+		defer db.Close()
+		client = client.WithDB(db)
+		logger.Info("direct membership enabled")
+	} else {
+		logger.Warn("KANEO_DATABASE_URL unset; falling back to invite-member emails")
+	}
 	engine := &reconcile.Engine{
 		Store:       st,
 		Assignments: cfg.Assignments,

@@ -31,7 +31,7 @@ func (f *fakeKaneo) ResolveWorkspace(_ context.Context, idOrSlug string) (*kaneo
 func (f *fakeKaneo) ListMembers(_ context.Context, orgID string) ([]kaneo.Member, error) {
 	return f.members[orgID], nil
 }
-func (f *fakeKaneo) InviteMember(_ context.Context, orgID, email, role string) error {
+func (f *fakeKaneo) EnsureMember(_ context.Context, orgID, email, _displayName, role string) error {
 	f.invites = append(f.invites, orgID+":"+email+":"+role)
 	f.members[orgID] = append(f.members[orgID], kaneo.Member{ID: "m-" + email, Role: role, Email: email})
 	return nil

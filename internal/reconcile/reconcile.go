@@ -16,7 +16,7 @@ import (
 type KaneoAPI interface {
 	ResolveWorkspace(ctx context.Context, idOrSlug string) (*kaneo.Workspace, error)
 	ListMembers(ctx context.Context, organizationID string) ([]kaneo.Member, error)
-	InviteMember(ctx context.Context, organizationID, email, role string) error
+	EnsureMember(ctx context.Context, organizationID, email, displayName, role string) error
 	UpdateMemberRole(ctx context.Context, organizationID, memberID, role string) error
 	RemoveMember(ctx context.Context, organizationID, memberIDOrEmail string) error
 }
@@ -95,12 +95,11 @@ func (e *Engine) User(ctx context.Context, userID string) error {
 			slog.Info("removed membership", "email", email, "workspace", ws.Slug)
 
 		case member == nil:
-			if err := e.Kaneo.InviteMember(ctx, ws.ID, email, string(wantRole)); err != nil {
-				// Already invited / already member: treat as soft success and try role update path next sync.
-				slog.Warn("invite failed", "email", email, "workspace", ws.Slug, "role", wantRole, "err", err)
+			if err := e.Kaneo.EnsureMember(ctx, ws.ID, email, u.Display, string(wantRole)); err != nil {
+				slog.Warn("ensure member failed", "email", email, "workspace", ws.Slug, "role", wantRole, "err", err)
 				continue
 			}
-			slog.Info("invited", "email", email, "workspace", ws.Slug, "role", wantRole)
+			slog.Info("ensured membership", "email", email, "workspace", ws.Slug, "role", wantRole)
 
 		case !strings.EqualFold(member.Role, string(wantRole)):
 			if err := e.Kaneo.UpdateMemberRole(ctx, ws.ID, member.ID, string(wantRole)); err != nil {
