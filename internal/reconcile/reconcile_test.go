@@ -64,15 +64,15 @@ func TestReconcileInviteAndElevate(t *testing.T) {
 
 	fk := &fakeKaneo{
 		workspaces: map[string]*kaneo.Workspace{
-			"neuland-next": {ID: "ws1", Slug: "neuland-next", Name: "Neuland Next"},
+			"product": {ID: "ws1", Slug: "product", Name: "Product"},
 		},
 		members: map[string][]kaneo.Member{"ws1": nil},
 	}
 	engine := &reconcile.Engine{
 		Store: st,
 		Assignments: &assignments.Config{Assignments: []assignments.Assignment{
-			{Group: "kaneo", Workspace: "neuland-next", Role: assignments.RoleViewer},
-			{Group: "vorstand", Workspace: "neuland-next", Role: assignments.RoleAdmin},
+			{Group: "kaneo", Workspace: "product", Role: assignments.RoleViewer},
+			{Group: "admins", Workspace: "product", Role: assignments.RoleAdmin},
 		}},
 		Kaneo: fk,
 	}
@@ -83,7 +83,7 @@ func TestReconcileInviteAndElevate(t *testing.T) {
 		t.Fatalf("invites: %v", fk.invites)
 	}
 
-	_ = st.UpsertGroup(&store.Group{ID: "g2", DisplayName: "vorstand", Members: []string{"u1"}})
+	_ = st.UpsertGroup(&store.Group{ID: "g2", DisplayName: "admins", Members: []string{"u1"}})
 	if err := engine.User(context.Background(), "u1"); err != nil {
 		t.Fatal(err)
 	}

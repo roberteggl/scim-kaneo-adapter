@@ -5,16 +5,16 @@
 # - Allowed roles: viewer, member, admin (owner is never assigned by SCIM).
 assignments:
   # Single Authentik group → multiple Kaneo workspaces
-  - group: vorstand
-    workspace: neuland
+  - group: admins
+    workspace: product
     role: admin
-  - group: vorstand
-    workspace: infra
+  - group: admins
+    workspace: platform
     role: member
 
-  - group: kaneo-neuland-member
-    workspace: neuland
+  - group: kaneo-product-member
+    workspace: product
     role: member
-  - group: kaneo-neuland-viewer
-    workspace: neuland
+  - group: kaneo-product-viewer
+    workspace: product
     role: viewer

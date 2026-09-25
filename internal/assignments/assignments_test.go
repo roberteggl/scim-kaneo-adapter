@@ -8,26 +8,26 @@ import (
 
 func TestDesiredWorkspacesHighestRoleWins(t *testing.T) {
 	c := &Config{Assignments: []Assignment{
-		{Group: "kaneo", Workspace: "neuland-next", Role: RoleViewer},
-		{Group: "software-neuland-next", Workspace: "neuland-next", Role: RoleMember},
-		{Group: "vorstand", Workspace: "neuland-next", Role: RoleAdmin},
-		{Group: "vorstand", Workspace: "neuland-ressorts", Role: RoleAdmin},
+		{Group: "kaneo", Workspace: "product", Role: RoleViewer},
+		{Group: "software-product", Workspace: "product", Role: RoleMember},
+		{Group: "admins", Workspace: "product", Role: RoleAdmin},
+		{Group: "admins", Workspace: "platform", Role: RoleAdmin},
 	}}
-	got := c.DesiredWorkspaces([]string{"kaneo", "vorstand"})
-	if got["neuland-next"] != RoleAdmin {
-		t.Fatalf("neuland-next: want admin, got %s", got["neuland-next"])
+	got := c.DesiredWorkspaces([]string{"kaneo", "admins"})
+	if got["product"] != RoleAdmin {
+		t.Fatalf("product: want admin, got %s", got["product"])
 	}
-	if got["neuland-ressorts"] != RoleAdmin {
-		t.Fatalf("neuland-ressorts: want admin, got %s", got["neuland-ressorts"])
+	if got["platform"] != RoleAdmin {
+		t.Fatalf("platform: want admin, got %s", got["platform"])
 	}
 }
 
 func TestDesiredWorkspacesCaseInsensitiveGroups(t *testing.T) {
 	c := &Config{Assignments: []Assignment{
-		{Group: "Kaneo", Workspace: "neuland-next", Role: RoleViewer},
+		{Group: "Kaneo", Workspace: "product", Role: RoleViewer},
 	}}
 	got := c.DesiredWorkspaces([]string{"kaneo"})
-	if got["neuland-next"] != RoleViewer {
+	if got["product"] != RoleViewer {
 		t.Fatalf("want viewer, got %v", got)
 	}
 }
@@ -38,10 +38,10 @@ func TestLoadAndValidate(t *testing.T) {
 	content := `
 assignments:
   - group: kaneo
-    workspace: neuland-next
+    workspace: product
     role: viewer
-  - group: vorstand
-    workspace: neuland-ressorts
+  - group: admins
+    workspace: platform
     role: ADMIN
 `
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {

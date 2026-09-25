@@ -44,15 +44,15 @@ across rows to put members of that one IdP group into several workspaces:
 ```yaml
 assignments:
   # One Authentik group → two Kaneo workspaces
-  - group: vorstand
-    workspace: neuland
+  - group: admins
+    workspace: product
     role: admin
-  - group: vorstand
-    workspace: infra
+  - group: admins
+    workspace: platform
     role: member
 
-  - group: kaneo-neuland-member
-    workspace: neuland   # slug or organization id
+  - group: kaneo-product-member
+    workspace: product   # slug or organization id
     role: member         # viewer | member | admin
 ```
 
