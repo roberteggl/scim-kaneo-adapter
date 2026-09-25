@@ -30,8 +30,8 @@ func (s *Server) createGroup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusCreated, s.toSCIMGroup(r, g))
 	s.reconcileMembers(r, g.Members)
+	writeJSON(w, http.StatusCreated, s.toSCIMGroup(r, g))
 }
 
 func (s *Server) listGroups(w http.ResponseWriter, r *http.Request) {
@@ -84,8 +84,8 @@ func (s *Server) putGroup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, s.toSCIMGroup(r, cur))
 	s.reconcileMembers(r, union(before, cur.Members))
+	writeJSON(w, http.StatusOK, s.toSCIMGroup(r, cur))
 }
 
 func (s *Server) patchGroup(w http.ResponseWriter, r *http.Request) {
@@ -130,8 +130,8 @@ func (s *Server) patchGroup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, s.toSCIMGroup(r, cur))
 	s.reconcileMembers(r, union(before, cur.Members))
+	writeJSON(w, http.StatusOK, s.toSCIMGroup(r, cur))
 }
 
 func (s *Server) deleteGroup(w http.ResponseWriter, r *http.Request) {

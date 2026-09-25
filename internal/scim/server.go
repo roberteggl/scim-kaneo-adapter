@@ -79,7 +79,9 @@ func (s *Server) reconcile(ctx context.Context, userID string) {
 	if s.engine == nil || userID == "" {
 		return
 	}
-	_ = s.engine.User(ctx, userID)
+	// Authentik often closes the HTTP request after receiving 200; keep
+	// reconcile alive so multi-workspace invites are not aborted mid-loop.
+	_ = s.engine.User(context.WithoutCancel(ctx), userID)
 }
 
 func (s *Server) listSchemas(w http.ResponseWriter, r *http.Request) {
