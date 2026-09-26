@@ -2,6 +2,7 @@ package scim
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -20,8 +21,27 @@ func (s *Server) createGroup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalidValue", "displayName required")
 		return
 	}
+	// Prefer IdP externalId as the SCIM id so mappings survive store rebuilds
+	// when Authentik reuses the same Authentik-group UUID as externalId.
+	id := strings.TrimSpace(in.ExternalID)
+	if id == "" {
+		id = uuid.NewString()
+	} else if existing, ok := s.store.GetGroup(id); ok {
+		// Idempotent create: refresh and reconcile.
+		before := append([]string(nil), existing.Members...)
+		existing.ExternalID = in.ExternalID
+		existing.DisplayName = in.DisplayName
+		existing.Members = memberIDs(in.Members)
+		if err := s.store.UpsertGroup(existing); err != nil {
+			writeError(w, http.StatusInternalServerError, "", err.Error())
+			return
+		}
+		s.reconcileMembers(r, union(before, existing.Members))
+		writeJSON(w, http.StatusOK, s.toSCIMGroup(r, existing))
+		return
+	}
 	g := &store.Group{
-		ID:          uuid.NewString(),
+		ID:          id,
 		ExternalID:  in.ExternalID,
 		DisplayName: in.DisplayName,
 		Members:     memberIDs(in.Members),
@@ -68,8 +88,8 @@ func (s *Server) putGroup(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	cur, ok := s.store.GetGroup(id)
 	if !ok {
-		writeError(w, http.StatusNotFound, "", "group not found")
-		return
+		cur = &store.Group{ID: id, ExternalID: id}
+		slogRehydrateGroup(id)
 	}
 	var in Group
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -92,8 +112,11 @@ func (s *Server) patchGroup(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	cur, ok := s.store.GetGroup(id)
 	if !ok {
-		writeError(w, http.StatusNotFound, "", "group not found")
-		return
+		// After an emptyDir/store wipe Authentik still holds the old SCIM group
+		// id. Accept the PATCH against that id so member removals (e.g. leaving
+		// authentik Admins → fall back to viewer) still reconcile.
+		cur = &store.Group{ID: id, ExternalID: id}
+		slogRehydrateGroup(id)
 	}
 	ops, err := decodePatch(r)
 	if err != nil {
@@ -101,6 +124,7 @@ func (s *Server) patchGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	before := append([]string(nil), cur.Members...)
+	var touched []string
 	for _, op := range ops {
 		path := strings.ToLower(op.Path)
 		switch op.Op {
@@ -111,10 +135,13 @@ func (s *Server) patchGroup(w http.ResponseWriter, r *http.Request) {
 				}
 			} else if path == "members" || path == "" {
 				cur.Members = valuesAsMemberIDs(op.Value)
+				touched = append(touched, cur.Members...)
 			}
 		case "add":
 			if path == "members" || strings.HasPrefix(path, "members") {
-				cur.Members = uniqueAppend(cur.Members, valuesAsMemberIDs(op.Value)...)
+				added := valuesAsMemberIDs(op.Value)
+				cur.Members = uniqueAppend(cur.Members, added...)
+				touched = append(touched, added...)
 			}
 		case "remove":
 			if path == "members" || strings.HasPrefix(path, "members") {
@@ -123,6 +150,7 @@ func (s *Server) patchGroup(w http.ResponseWriter, r *http.Request) {
 					remove = []string{extractEqValue(op.Path)}
 				}
 				cur.Members = subtract(cur.Members, remove)
+				touched = append(touched, remove...)
 			}
 		}
 	}
@@ -130,7 +158,7 @@ func (s *Server) patchGroup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "", err.Error())
 		return
 	}
-	s.reconcileMembers(r, union(before, cur.Members))
+	s.reconcileMembers(r, union(union(before, cur.Members), touched))
 	writeJSON(w, http.StatusOK, s.toSCIMGroup(r, cur))
 }
 
@@ -281,4 +309,8 @@ func extractEqValue(path string) string {
 	}
 	rest := strings.TrimSpace(path[idx+len("value eq"):])
 	return strings.Trim(rest, ` "`)
+}
+
+func slogRehydrateGroup(id string) {
+	slog.Info("rehydrating missing SCIM group for patch", "id", id)
 }

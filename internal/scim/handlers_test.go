@@ -76,3 +76,52 @@ func TestGroupMembershipPatchReconciles(t *testing.T) {
 		t.Fatalf("group names: %v", names)
 	}
 }
+
+func TestPatchMissingGroupRehydratesAndRemoves(t *testing.T) {
+	st := store.New("")
+	srv := scim.NewServer(st, "secret", nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/scim/v2/Users", bytes.NewBufferString(
+		`{"userName":"c@example.com","emails":[{"value":"c@example.com","primary":true}]}`,
+	))
+	req.Header.Set("Authorization", "Bearer secret")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	var user map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &user)
+	uid := user["id"].(string)
+
+	// Authentik still knows a remote group id that is gone from our store.
+	staleID := "88bee88a-1acd-4aa4-b779-bda7150f01f9"
+	patch := `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"remove","path":"members","value":[{"value":"` + uid + `"}]}]}`
+	req = httptest.NewRequest(http.MethodPatch, "/scim/v2/Groups/"+staleID, bytes.NewBufferString(patch))
+	req.Header.Set("Authorization", "Bearer secret")
+	req.Header.Set("Content-Type", "application/scim+json")
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200 rehydrate, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if _, ok := st.GetGroup(staleID); !ok {
+		t.Fatal("expected rehydrated group in store")
+	}
+}
+
+func TestCreateGroupUsesExternalID(t *testing.T) {
+	st := store.New("")
+	srv := scim.NewServer(st, "secret", nil)
+	ext := "e6491517-4b0c-4e7d-bb7b-411c9be68a20"
+	body := `{"displayName":"authentik Admins","externalId":"` + ext + `","members":[]}`
+	req := httptest.NewRequest(http.MethodPost, "/scim/v2/Groups", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer secret")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	var created map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &created)
+	if created["id"] != ext {
+		t.Fatalf("want id=%s got %v", ext, created["id"])
+	}
+}

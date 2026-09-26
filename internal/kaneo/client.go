@@ -108,6 +108,18 @@ func (c *Client) InviteMember(ctx context.Context, organizationID, email, role s
 
 // UpdateMemberRole changes a member's role.
 func (c *Client) UpdateMemberRole(ctx context.Context, organizationID, memberID, role string) error {
+	if c.db != nil {
+		res, err := c.db.ExecContext(ctx, `
+UPDATE workspace_member SET role=$1 WHERE id=$2 AND workspace_id=$3`, role, memberID, organizationID)
+		if err != nil {
+			return fmt.Errorf("update membership role: %w", err)
+		}
+		n, _ := res.RowsAffected()
+		if n == 0 {
+			return fmt.Errorf("membership %s not found in workspace %s", memberID, organizationID)
+		}
+		return nil
+	}
 	body := map[string]any{
 		"organizationId": organizationID,
 		"memberId":       memberID,
@@ -118,6 +130,21 @@ func (c *Client) UpdateMemberRole(ctx context.Context, organizationID, memberID,
 
 // RemoveMember removes a member by membership id or email.
 func (c *Client) RemoveMember(ctx context.Context, organizationID, memberIDOrEmail string) error {
+	if c.db != nil {
+		res, err := c.db.ExecContext(ctx, `
+DELETE FROM workspace_member
+WHERE workspace_id=$1 AND (id=$2 OR user_id IN (
+  SELECT id FROM "user" WHERE lower(email)=lower($2)
+))`, organizationID, memberIDOrEmail)
+		if err != nil {
+			return fmt.Errorf("remove membership: %w", err)
+		}
+		n, _ := res.RowsAffected()
+		if n == 0 {
+			return fmt.Errorf("membership %s not found in workspace %s", memberIDOrEmail, organizationID)
+		}
+		return nil
+	}
 	body := map[string]any{
 		"organizationId":  organizationID,
 		"memberIdOrEmail": memberIDOrEmail,
