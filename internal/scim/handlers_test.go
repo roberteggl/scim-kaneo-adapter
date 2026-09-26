@@ -107,6 +107,27 @@ func TestPatchMissingGroupRehydratesAndRemoves(t *testing.T) {
 	}
 }
 
+func TestPatchReplaceNullPathSetsDisplayName(t *testing.T) {
+	st := store.New("")
+	srv := scim.NewServer(st, "secret", nil)
+	id := "e6491517-4b0c-4e7d-bb7b-411c9be68a20"
+	_ = st.UpsertGroup(&store.Group{ID: id, ExternalID: id})
+
+	patch := `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"replace","value":{"displayName":"authentik Admins","externalId":"` + id + `"}}]}`
+	req := httptest.NewRequest(http.MethodPatch, "/scim/v2/Groups/"+id, bytes.NewBufferString(patch))
+	req.Header.Set("Authorization", "Bearer secret")
+	req.Header.Set("Content-Type", "application/scim+json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	g, ok := st.GetGroup(id)
+	if !ok || g.DisplayName != "authentik Admins" {
+		t.Fatalf("displayName not applied: %+v", g)
+	}
+}
+
 func TestCreateGroupUsesExternalID(t *testing.T) {
 	st := store.New("")
 	srv := scim.NewServer(st, "secret", nil)

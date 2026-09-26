@@ -133,9 +133,13 @@ func (s *Server) patchGroup(w http.ResponseWriter, r *http.Request) {
 				if v, ok := op.Value.(string); ok {
 					cur.DisplayName = v
 				}
-			} else if path == "members" || path == "" {
+			} else if path == "members" {
 				cur.Members = valuesAsMemberIDs(op.Value)
 				touched = append(touched, cur.Members...)
+			} else if path == "" {
+				// Authentik sends replace with path=null and a partial Group object
+				// (displayName, externalId, …) when syncing group attributes.
+				applyGroupReplaceValue(cur, op.Value, &touched)
 			}
 		case "add":
 			if path == "members" || strings.HasPrefix(path, "members") {
@@ -157,6 +161,9 @@ func (s *Server) patchGroup(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.UpsertGroup(cur); err != nil {
 		writeError(w, http.StatusInternalServerError, "", err.Error())
 		return
+	}
+	if strings.TrimSpace(cur.DisplayName) == "" {
+		slog.Warn("group patch left empty displayName; assignments will not match", "id", id)
 	}
 	s.reconcileMembers(r, union(union(before, cur.Members), touched))
 	writeJSON(w, http.StatusOK, s.toSCIMGroup(r, cur))
@@ -313,4 +320,23 @@ func extractEqValue(path string) string {
 
 func slogRehydrateGroup(id string) {
 	slog.Info("rehydrating missing SCIM group for patch", "id", id)
+}
+
+// applyGroupReplaceValue handles RFC7644 replace with no path (whole resource
+// subset), as sent by Authentik's _update_patch_general.
+func applyGroupReplaceValue(cur *store.Group, value any, touched *[]string) {
+	m, ok := value.(map[string]any)
+	if !ok {
+		return
+	}
+	if v, ok := m["displayName"].(string); ok && strings.TrimSpace(v) != "" {
+		cur.DisplayName = v
+	}
+	if v, ok := m["externalId"].(string); ok {
+		cur.ExternalID = v
+	}
+	if raw, has := m["members"]; has {
+		cur.Members = valuesAsMemberIDs(raw)
+		*touched = append(*touched, cur.Members...)
+	}
 }

@@ -3,6 +3,7 @@ package scim
 import (
 	"context"
 	"crypto/subtle"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -81,7 +82,9 @@ func (s *Server) reconcile(ctx context.Context, userID string) {
 	}
 	// Authentik often closes the HTTP request after receiving 200; keep
 	// reconcile alive so multi-workspace invites are not aborted mid-loop.
-	_ = s.engine.User(context.WithoutCancel(ctx), userID)
+	if err := s.engine.User(context.WithoutCancel(ctx), userID); err != nil {
+		slog.Error("reconcile failed", "user", userID, "err", err)
+	}
 }
 
 func (s *Server) listSchemas(w http.ResponseWriter, r *http.Request) {
