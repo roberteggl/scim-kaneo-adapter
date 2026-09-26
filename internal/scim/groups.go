@@ -315,7 +315,18 @@ func extractEqValue(path string) string {
 		return ""
 	}
 	rest := strings.TrimSpace(path[idx+len("value eq"):])
-	return strings.Trim(rest, ` "`)
+	// Authentik sends: members[value eq "uuid"]
+	if len(rest) >= 2 && (rest[0] == '"' || rest[0] == '\'') {
+		q := rest[0]
+		if end := strings.IndexByte(rest[1:], q); end >= 0 {
+			return rest[1 : 1+end]
+		}
+	}
+	// Unquoted fallback: stop at filter close bracket.
+	if end := strings.IndexAny(rest, "] "); end >= 0 {
+		rest = rest[:end]
+	}
+	return strings.Trim(rest, `"'`)
 }
 
 func slogRehydrateGroup(id string) {

@@ -77,6 +77,49 @@ func TestGroupMembershipPatchReconciles(t *testing.T) {
 	}
 }
 
+func TestPatchRemoveFilterPathDropsMember(t *testing.T) {
+	st := store.New("")
+	srv := scim.NewServer(st, "secret", nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/scim/v2/Users", bytes.NewBufferString(
+		`{"userName":"d@example.com","emails":[{"value":"d@example.com","primary":true}]}`,
+	))
+	req.Header.Set("Authorization", "Bearer secret")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	var user map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &user)
+	uid := user["id"].(string)
+
+	gbody := `{"displayName":"authentik Admins","externalId":"e6491517-4b0c-4e7d-bb7b-411c9be68a20","members":[{"value":"` + uid + `"}]}`
+	req = httptest.NewRequest(http.MethodPost, "/scim/v2/Groups", bytes.NewBufferString(gbody))
+	req.Header.Set("Authorization", "Bearer secret")
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	var group map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &group)
+	gid := group["id"].(string)
+
+	// Authentik removal form: path filter, no value body.
+	patch := `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"remove","path":"members[value eq \"` + uid + `\"]"}]}`
+	req = httptest.NewRequest(http.MethodPatch, "/scim/v2/Groups/"+gid, bytes.NewBufferString(patch))
+	req.Header.Set("Authorization", "Bearer secret")
+	req.Header.Set("Content-Type", "application/scim+json")
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	g, _ := st.GetGroup(gid)
+	if len(g.Members) != 0 {
+		t.Fatalf("member not removed, still %v", g.Members)
+	}
+	names := st.GroupNamesForUser(uid)
+	if len(names) != 0 {
+		t.Fatalf("user still in groups %v", names)
+	}
+}
+
 func TestPatchMissingGroupRehydratesAndRemoves(t *testing.T) {
 	st := store.New("")
 	srv := scim.NewServer(st, "secret", nil)
