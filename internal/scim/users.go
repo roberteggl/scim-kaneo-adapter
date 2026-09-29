@@ -30,7 +30,7 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 		ID:         uuid.NewString(),
 		ExternalID: in.ExternalID,
 		UserName:   firstNonEmpty(in.UserName, email),
-		Display:    displayName(in.Name, email),
+		Display:    resolveDisplay(in.DisplayName, in.Name, email),
 		Email:      email,
 		Active:     boolVal(in.Active, true),
 	}
@@ -90,7 +90,7 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) {
 	}
 	cur.ExternalID = in.ExternalID
 	cur.UserName = firstNonEmpty(in.UserName, email)
-	cur.Display = displayName(in.Name, email)
+	cur.Display = resolveDisplay(in.DisplayName, in.Name, email)
 	cur.Email = email
 	cur.Active = boolVal(in.Active, cur.Active)
 	if err := s.store.UpsertUser(cur); err != nil {
@@ -126,6 +126,9 @@ func (s *Server) patchUser(w http.ResponseWriter, r *http.Request) {
 				if v, exists := m["userName"].(string); exists && v != "" {
 					cur.UserName = v
 				}
+				if v, exists := m["displayName"].(string); exists && strings.TrimSpace(v) != "" {
+					cur.Display = strings.TrimSpace(v)
+				}
 				if v, exists := m["externalId"].(string); exists {
 					cur.ExternalID = v
 				}
@@ -133,6 +136,10 @@ func (s *Server) patchUser(w http.ResponseWriter, r *http.Request) {
 		case op.Op == "replace" && path == "username":
 			if v, ok := op.Value.(string); ok {
 				cur.UserName = v
+			}
+		case op.Op == "replace" && path == "displayname":
+			if v, ok := op.Value.(string); ok && strings.TrimSpace(v) != "" {
+				cur.Display = strings.TrimSpace(v)
 			}
 		}
 	}
@@ -163,14 +170,15 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
 func (s *Server) toSCIMUser(r *http.Request, u *store.User) User {
 	active := u.Active
 	return User{
-		Schemas:    []string{schemaUser},
-		ID:         u.ID,
-		ExternalID: u.ExternalID,
-		UserName:   u.UserName,
-		Name:       &Name{Formatted: u.Display},
-		Emails:     []Email{{Value: u.Email, Primary: true, Type: "work"}},
-		Active:     &active,
-		Meta:       &Meta{ResourceType: "User", Location: location(r, "Users", u.ID)},
+		Schemas:     []string{schemaUser},
+		ID:          u.ID,
+		ExternalID:  u.ExternalID,
+		UserName:    u.UserName,
+		DisplayName: u.Display,
+		Name:        &Name{Formatted: u.Display},
+		Emails:      []Email{{Value: u.Email, Primary: true, Type: "work"}},
+		Active:      &active,
+		Meta:        &Meta{ResourceType: "User", Location: location(r, "Users", u.ID)},
 	}
 }
 

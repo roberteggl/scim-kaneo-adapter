@@ -74,9 +74,16 @@ WHERE status='pending' AND workspace_id=$1 AND lower(email)=lower($2)`, organiza
 }
 
 func (c *Client) ensureUser(ctx context.Context, email, name string) (string, error) {
-	var id string
-	err := c.db.QueryRowContext(ctx, `SELECT id FROM "user" WHERE lower(email)=lower($1)`, email).Scan(&id)
+	var id, existingName string
+	err := c.db.QueryRowContext(ctx, `SELECT id, name FROM "user" WHERE lower(email)=lower($1)`, email).Scan(&id, &existingName)
 	if err == nil {
+		if name != "" && name != existingName {
+			if _, err := c.db.ExecContext(ctx, `
+UPDATE "user" SET name=$1, updated_at=NOW() WHERE id=$2`, name, id); err != nil {
+				return "", fmt.Errorf("update user name %s: %w", email, err)
+			}
+			slog.Info("updated kaneo user name", "email", email, "id", id, "name", name)
+		}
 		return id, nil
 	}
 	if err != sql.ErrNoRows {
@@ -93,11 +100,18 @@ ON CONFLICT (email) DO NOTHING`, id, name, email)
 	if err != nil {
 		return "", fmt.Errorf("insert user %s: %w", email, err)
 	}
-	// Re-read in case of concurrent insert.
-	if err := c.db.QueryRowContext(ctx, `SELECT id FROM "user" WHERE lower(email)=lower($1)`, email).Scan(&id); err != nil {
+	// Re-read in case of concurrent insert; also refresh name if a concurrent
+	// insert won with a weaker value.
+	if err := c.db.QueryRowContext(ctx, `SELECT id, name FROM "user" WHERE lower(email)=lower($1)`, email).Scan(&id, &existingName); err != nil {
 		return "", fmt.Errorf("reload user %s: %w", email, err)
 	}
-	slog.Info("created kaneo user", "email", email, "id", id)
+	if name != "" && name != existingName {
+		if _, err := c.db.ExecContext(ctx, `
+UPDATE "user" SET name=$1, updated_at=NOW() WHERE id=$2`, name, id); err != nil {
+			return "", fmt.Errorf("update user name %s: %w", email, err)
+		}
+	}
+	slog.Info("created kaneo user", "email", email, "id", id, "name", name)
 	return id, nil
 }
 

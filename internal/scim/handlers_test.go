@@ -11,6 +11,39 @@ import (
 	"github.com/roberteggl/scim-kaneo-adapter/internal/store"
 )
 
+func TestCreateUserUsesDisplayName(t *testing.T) {
+	st := store.New("")
+	srv := scim.NewServer(st, "secret", nil)
+	body := `{
+		"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],
+		"userName":"ada@example.com",
+		"displayName":"Ada Lovelace",
+		"emails":[{"value":"ada@example.com","primary":true}],
+		"active":true
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/scim/v2/Users", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer secret")
+	req.Header.Set("Content-Type", "application/scim+json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	var created map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &created)
+	if got, _ := created["displayName"].(string); got != "Ada Lovelace" {
+		t.Fatalf("displayName=%q want Ada Lovelace", got)
+	}
+	id, _ := created["id"].(string)
+	u, ok := st.GetUser(id)
+	if !ok {
+		t.Fatal("user not stored")
+	}
+	if u.Display != "Ada Lovelace" {
+		t.Fatalf("stored Display=%q", u.Display)
+	}
+}
+
 func TestCreateAndGetUser(t *testing.T) {
 	st := store.New("")
 	srv := scim.NewServer(st, "secret", nil)

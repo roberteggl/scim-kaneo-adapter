@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 const contentType = "application/scim+json"
@@ -39,14 +40,15 @@ type Meta struct {
 
 // User is a SCIM user resource.
 type User struct {
-	Schemas    []string `json:"schemas"`
-	ID         string   `json:"id"`
-	ExternalID string   `json:"externalId,omitempty"`
-	UserName   string   `json:"userName"`
-	Name       *Name    `json:"name,omitempty"`
-	Emails     []Email  `json:"emails,omitempty"`
-	Active     *bool    `json:"active,omitempty"`
-	Meta       *Meta    `json:"meta,omitempty"`
+	Schemas     []string `json:"schemas"`
+	ID          string   `json:"id"`
+	ExternalID  string   `json:"externalId,omitempty"`
+	UserName    string   `json:"userName"`
+	DisplayName string   `json:"displayName,omitempty"`
+	Name        *Name    `json:"name,omitempty"`
+	Emails      []Email  `json:"emails,omitempty"`
+	Active      *bool    `json:"active,omitempty"`
+	Meta        *Meta    `json:"meta,omitempty"`
 }
 
 // Member is a SCIM group member reference.
@@ -133,17 +135,20 @@ func primaryEmail(emails []Email, userName string) string {
 	return userName
 }
 
-func displayName(n *Name, userName string) string {
-	if n == nil {
-		return userName
+// resolveDisplay prefers top-level displayName (Authentik), then name.*, then fallback.
+func resolveDisplay(displayName string, n *Name, fallback string) string {
+	if v := strings.TrimSpace(displayName); v != "" {
+		return v
 	}
-	if n.Formatted != "" {
-		return n.Formatted
+	if n != nil {
+		if n.Formatted != "" {
+			return n.Formatted
+		}
+		if n.GivenName != "" || n.FamilyName != "" {
+			return strings.TrimSpace(n.GivenName + " " + n.FamilyName)
+		}
 	}
-	if n.GivenName != "" || n.FamilyName != "" {
-		return n.GivenName + " " + n.FamilyName
-	}
-	return userName
+	return fallback
 }
 
 func boolVal(p *bool, def bool) bool {
