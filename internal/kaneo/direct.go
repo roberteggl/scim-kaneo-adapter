@@ -73,6 +73,18 @@ WHERE status='pending' AND workspace_id=$1 AND lower(email)=lower($2)`, organiza
 	return nil
 }
 
+// SyncUserName updates an existing Kaneo user's display name when DB mode is on.
+// No-op without a DB handle or when the name is unchanged / empty.
+func (c *Client) SyncUserName(ctx context.Context, email, displayName string) error {
+	email = strings.TrimSpace(email)
+	name := strings.TrimSpace(displayName)
+	if c.db == nil || email == "" || name == "" {
+		return nil
+	}
+	_, err := c.ensureUser(ctx, email, name)
+	return err
+}
+
 func (c *Client) ensureUser(ctx context.Context, email, name string) (string, error) {
 	var id, existingName string
 	err := c.db.QueryRowContext(ctx, `SELECT id, name FROM "user" WHERE lower(email)=lower($1)`, email).Scan(&id, &existingName)

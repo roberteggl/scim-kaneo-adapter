@@ -19,6 +19,7 @@ type fakeKaneo struct {
 	invites    []string
 	updates    []string
 	removes    []string
+	nameSyncs  []string
 }
 
 func (f *fakeKaneo) ResolveWorkspace(_ context.Context, idOrSlug string) (*kaneo.Workspace, error) {
@@ -34,6 +35,10 @@ func (f *fakeKaneo) ListMembers(_ context.Context, orgID string) ([]kaneo.Member
 func (f *fakeKaneo) EnsureMember(_ context.Context, orgID, email, _displayName, role string) error {
 	f.invites = append(f.invites, orgID+":"+email+":"+role)
 	f.members[orgID] = append(f.members[orgID], kaneo.Member{ID: "m-" + email, Role: role, Email: email})
+	return nil
+}
+func (f *fakeKaneo) SyncUserName(_ context.Context, email, displayName string) error {
+	f.nameSyncs = append(f.nameSyncs, email+":"+displayName)
 	return nil
 }
 func (f *fakeKaneo) UpdateMemberRole(_ context.Context, orgID, memberID, role string) error {
@@ -55,6 +60,39 @@ func (f *fakeKaneo) RemoveMember(_ context.Context, orgID, memberIDOrEmail strin
 	}
 	f.members[orgID] = kept
 	return nil
+}
+
+func TestReconcileSyncsNameForExistingMember(t *testing.T) {
+	st := store.New("")
+	_ = st.UpsertUser(&store.User{
+		ID: "u1", Email: "a@example.com", Display: "Ada Lovelace", Active: true, UserName: "a",
+	})
+	_ = st.UpsertGroup(&store.Group{ID: "g1", DisplayName: "kaneo", Members: []string{"u1"}})
+
+	fk := &fakeKaneo{
+		workspaces: map[string]*kaneo.Workspace{
+			"product": {ID: "ws1", Slug: "product", Name: "Product"},
+		},
+		members: map[string][]kaneo.Member{
+			"ws1": {{ID: "m1", Role: "viewer", Email: "a@example.com"}},
+		},
+	}
+	engine := &reconcile.Engine{
+		Store: st,
+		Assignments: &assignments.Config{Assignments: []assignments.Assignment{
+			{Group: "kaneo", Workspace: "product", Role: assignments.RoleViewer},
+		}},
+		Kaneo: fk,
+	}
+	if err := engine.User(context.Background(), "u1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(fk.invites) != 0 {
+		t.Fatalf("should not re-invite existing member: %v", fk.invites)
+	}
+	if len(fk.nameSyncs) != 1 || fk.nameSyncs[0] != "a@example.com:Ada Lovelace" {
+		t.Fatalf("nameSyncs: %v", fk.nameSyncs)
+	}
 }
 
 func TestReconcileInviteAndElevate(t *testing.T) {

@@ -17,6 +17,7 @@ type KaneoAPI interface {
 	ResolveWorkspace(ctx context.Context, idOrSlug string) (*kaneo.Workspace, error)
 	ListMembers(ctx context.Context, organizationID string) ([]kaneo.Member, error)
 	EnsureMember(ctx context.Context, organizationID, email, displayName, role string) error
+	SyncUserName(ctx context.Context, email, displayName string) error
 	UpdateMemberRole(ctx context.Context, organizationID, memberID, role string) error
 	RemoveMember(ctx context.Context, organizationID, memberIDOrEmail string) error
 }
@@ -47,11 +48,25 @@ func (e *Engine) User(ctx context.Context, userID string) error {
 		desired = map[string]assignments.Role{}
 	}
 
+	email := strings.TrimSpace(u.Email)
+	if email == "" {
+		return fmt.Errorf("user %s has no email", userID)
+	}
+
+	// Refresh Kaneo display name even when membership is already correct.
+	// EnsureMember only runs for new members, so existing rows would otherwise
+	// keep the email-as-name from the first SQL insert.
+	if u.Active {
+		if err := e.Kaneo.SyncUserName(ctx, email, u.Display); err != nil {
+			slog.Warn("sync user name failed", "email", email, "err", err)
+		}
+	}
+
 	// Authentik often POSTs Users before Groups. An active user with no SCIM
 	// group membership yet must not be stripped from workspaces — wait until
 	// groups arrive (or the user is deactivated).
 	if u.Active && len(groups) == 0 {
-		slog.Info("skip reconcile until groups synced", "email", strings.TrimSpace(u.Email), "user", userID)
+		slog.Info("skip reconcile until groups synced", "email", email, "user", userID)
 		return nil
 	}
 
@@ -62,11 +77,6 @@ func (e *Engine) User(ctx context.Context, userID string) error {
 	}
 	for w := range desired {
 		targets[w] = struct{}{}
-	}
-
-	email := strings.TrimSpace(u.Email)
-	if email == "" {
-		return fmt.Errorf("user %s has no email", userID)
 	}
 
 	for key := range targets {
@@ -109,6 +119,17 @@ func (e *Engine) User(ctx context.Context, userID string) error {
 		}
 	}
 	return nil
+}
+
+// AllUsers reconciles every stored SCIM user (used on startup to backfill).
+func (e *Engine) AllUsers(ctx context.Context) {
+	users := e.Store.ListUsers()
+	slog.Info("startup reconcile", "users", len(users))
+	for _, u := range users {
+		if err := e.User(ctx, u.ID); err != nil {
+			slog.Warn("startup reconcile failed", "user", u.ID, "email", u.Email, "err", err)
+		}
+	}
 }
 
 func (e *Engine) resolve(ctx context.Context, idOrSlug string) (*kaneo.Workspace, error) {

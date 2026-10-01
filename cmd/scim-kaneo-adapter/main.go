@@ -57,6 +57,10 @@ func main() {
 	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// Backfill Kaneo names / memberships for users already in the SCIM store
+	// (e.g. after fixing displayName handling for previously provisioned rows).
+	go engine.AllUsers(rootCtx)
+
 	errCh := make(chan error, 1)
 	go func() {
 		logger.Info("listening",
